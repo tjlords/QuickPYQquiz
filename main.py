@@ -6,15 +6,39 @@ from db import Database
 # ----------------------
 # Config from environment
 # ----------------------
-API_ID = int(os.environ.get("API_ID"))
+def get_env_int(key, default=0):
+    val = os.environ.get(key)
+    if val is None:
+        print(f"⚠️ Environment variable {key} not set, using default {default}")
+        return default
+    return int(val)
+
+API_ID = get_env_int("API_ID")
 API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-OWNER_ID = int(os.environ.get("OWNER_ID"))
+OWNER_ID = get_env_int("OWNER_ID")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-PORT = int(os.environ.get("PORT", 10000))  # Render health check port
+PORT = int(os.environ.get("PORT", 10000))
 HOST = "0.0.0.0"
 
+# ----------------------
+# Environment debug
+# ----------------------
+print("🔹 Environment Variables:")
+print(f"API_ID = {API_ID}")
+print(f"API_HASH = {'SET' if API_HASH else 'NOT SET'}")
+print(f"BOT_TOKEN = {'SET' if BOT_TOKEN else 'NOT SET'}")
+print(f"OWNER_ID = {OWNER_ID}")
+print(f"DATABASE_URL = {'SET' if DATABASE_URL else 'NOT SET'}")
+print(f"PORT = {PORT}")
+
+if not BOT_TOKEN or not API_HASH or API_ID == 0 or OWNER_ID == 0 or not DATABASE_URL:
+    raise ValueError("❌ One or more required environment variables are missing or invalid!")
+
+# ----------------------
+# Database
+# ----------------------
 db = Database(DATABASE_URL)
 
 # ----------------------
@@ -32,13 +56,8 @@ bot = Client(
 # ----------------------
 @bot.on_message(filters.private & filters.command("start"))
 async def start(_, msg):
-    await msg.reply(
-        "👋 Hello! I am your Quiz Bot.\n"
-        "Commands:\n"
-        "/add - Add question (Owner only)\n"
-        "/groupsave - Save group (Owner only)\n"
-        "/startquiz FolderName - Start a quiz"
-    )
+    await msg.reply("✅ Bot is alive! This is a test response.")
+    print(f"📩 Received /start from chat_id={msg.chat.id}")
 
 @bot.on_message(filters.private & filters.user(OWNER_ID) & filters.command("add"))
 async def add_question(_, msg):
@@ -110,7 +129,7 @@ async def start_quiz(_, msg):
     await msg.reply(f"✅ Quiz started from folder: {folder}")
 
 # ----------------------
-# Simple HTTP Healthcheck Server
+# Healthcheck Server
 # ----------------------
 async def healthcheck(reader, writer):
     response = (
@@ -125,7 +144,7 @@ async def healthcheck(reader, writer):
 
 async def start_healthcheck_server():
     server = await asyncio.start_server(healthcheck, HOST, PORT)
-    print(f"🌐 Healthcheck server running on port {PORT}")
+    print(f"🌐 Healthcheck server running on {HOST}:{PORT}")
     async with server:
         await server.serve_forever()
 
