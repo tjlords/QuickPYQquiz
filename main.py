@@ -103,9 +103,9 @@ async def start_quiz(_, msg):
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
-        self.send_header("Content-type", "text/plain")
+        self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"✅ Quiz Bot is running!")
+        self.wfile.write("✅ Quiz Bot is running!".encode("utf-8"))
 
 def run_webserver():
     port = int(os.environ.get("PORT", 10000))
@@ -122,7 +122,7 @@ async def main():
     await bot.start()
     print("🤖 Bot running...")
 
-    # Start web server in background thread
+    # Start HTTP server in background thread
     threading.Thread(target=run_webserver, daemon=True).start()
 
     await idle()  # keep bot running
