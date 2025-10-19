@@ -1,14 +1,38 @@
 import os
 import asyncio
-from pyrogram import Client, filters, idle
-from config import *
+from pyrogram import Client, filters
+from pyrogram.types import Update
+from pyrogram.methods import SetWebhook
 from db import Database
 
+# ----------------------
+# Config from environment
+# ----------------------
+API_ID = int(os.environ.get("API_ID"))
+API_HASH = os.environ.get("API_HASH")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+OWNER_ID = int(os.environ.get("OWNER_ID"))
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+WEBHOOK_PATH = "/" + BOT_TOKEN  # unique path for Telegram
+PORT = int(os.environ.get("PORT", 10000))  # Render port
+HOST = "0.0.0.0"
+
 db = Database(DATABASE_URL)
-bot = Client("quizbot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # ----------------------
-# Handlers
+# Bot setup
+# ----------------------
+bot = Client(
+    "quizbot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN,
+    workdir="./"  # optional
+)
+
+# ----------------------
+# Command Handlers
 # ----------------------
 @bot.on_message(filters.private & filters.command("start"))
 async def start(_, msg):
@@ -26,8 +50,10 @@ async def add_question(_, msg):
     folder_msg = await bot.listen(msg.chat.id)
     folder = folder_msg.text.strip()
 
-    await msg.reply("Now send the question and options in this format:\n\n"
-                    "'Question text'\nOption1 ✅\nOption2\nOption3\nOption4\nExplain: Reason text")
+    await msg.reply(
+        "Now send the question and options in this format:\n\n"
+        "'Question text'\nOption1 ✅\nOption2\nOption3\nOption4\nExplain: Reason text"
+    )
 
     q_msg = await bot.listen(msg.chat.id)
     text = q_msg.text.strip().splitlines()
@@ -88,21 +114,14 @@ async def start_quiz(_, msg):
     await msg.reply(f"✅ Quiz started from folder: {folder}")
 
 # ----------------------
-# Async web server for Render
+# Health Check HTTP Server
 # ----------------------
-async def handle_client(reader, writer):
+async def healthcheck(reader, writer):
     response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n✅ Quiz Bot is running!"
     writer.write(response.encode("utf-8"))
     await writer.drain()
     writer.close()
     await writer.wait_closed()
-
-async def start_webserver():
-    port = int(os.environ.get("PORT", 10000))
-    server = await asyncio.start_server(handle_client, "0.0.0.0", port)
-    print(f"🌐 Web server running on port {port}")
-    async with server:
-        await server.serve_forever()
 
 # ----------------------
 # Main
@@ -110,11 +129,21 @@ async def start_webserver():
 async def main():
     await db.connect()
     print("✅ Database connected.")
-    await bot.start()
-    print("🤖 Bot running...")
 
-    # Run web server and keep bot idle in same loop
-    await asyncio.gather(start_webserver(), idle())
+    await bot.start()
+    print("🤖 Bot started")
+
+    # Set webhook with public URL
+    WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_URL')}{WEBHOOK_PATH}"
+    await bot.set_webhook(WEBHOOK_URL)
+    print(f"🌐 Webhook set to: {WEBHOOK_URL}")
+
+    # Start simple async web server for Render port
+    server = await asyncio.start_server(healthcheck, HOST, PORT)
+    print(f"🌐 Web server listening on port {PORT}")
+
+    async with server:
+        await server.serve_forever()
 
 if __name__ == "__main__":
     asyncio.run(main())
