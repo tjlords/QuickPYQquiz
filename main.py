@@ -12,6 +12,9 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = int(os.environ.get("OWNER_ID"))
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+PORT = int(os.environ.get("PORT", 10000))  # Render health check port
+HOST = "0.0.0.0"
+
 db = Database(DATABASE_URL)
 
 # ----------------------
@@ -107,18 +110,40 @@ async def start_quiz(_, msg):
     await msg.reply(f"✅ Quiz started from folder: {folder}")
 
 # ----------------------
+# Simple HTTP Healthcheck Server
+# ----------------------
+async def healthcheck(reader, writer):
+    response = (
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/plain; charset=utf-8\r\n"
+        "\r\n✅ Quiz Bot is running!"
+    )
+    writer.write(response.encode("utf-8"))
+    await writer.drain()
+    writer.close()
+    await writer.wait_closed()
+
+async def start_healthcheck_server():
+    server = await asyncio.start_server(healthcheck, HOST, PORT)
+    print(f"🌐 Healthcheck server running on port {PORT}")
+    async with server:
+        await server.serve_forever()
+
+# ----------------------
 # Main
 # ----------------------
 async def main():
     await db.connect()
-    print("✅ Database connected.")
+    print("✅ Database connected")
 
     await bot.start()
-    print("🤖 Bot started")
+    print("🤖 Bot started and ready")
 
-    # keep bot running
+    # Start healthcheck server in background
+    asyncio.create_task(start_healthcheck_server())
+
+    # Keep bot running
     await idle()
 
 if __name__ == "__main__":
     asyncio.run(main())
-                
