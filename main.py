@@ -1,10 +1,16 @@
+import os
 import asyncio
-from pyrogram import Client, filters, idle  # ✅ import idle here
+from pyrogram import Client, filters, idle
+from aiohttp import web
 from config import *
 from db import Database
 
 db = Database(DATABASE_URL)
 bot = Client("quizbot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+
+# ----------------------
+# Handlers
+# ----------------------
 
 @bot.on_message(filters.private & filters.user(OWNER_ID) & filters.command("add"))
 async def add_question(_, msg):
@@ -72,12 +78,31 @@ async def start_quiz(_, msg):
     )
     await msg.reply(f"✅ Quiz started from folder: {folder}")
 
+# ----------------------
+# Main function
+# ----------------------
+
 async def main():
     await db.connect()
     print("✅ Database connected.")
     await bot.start()
     print("🤖 Bot running...")
-    await idle()  # ✅ now this will work
+
+    # Start a tiny web server to satisfy Render's port requirement
+    async def handle(request):
+        return web.Response(text="✅ Bot is running!")
+
+    app = web.Application()
+    app.router.add_get("/", handle)
+
+    port = int(os.environ.get("PORT", 10000))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"🌐 Web server running on port {port}")
+
+    await idle()  # keep bot running
 
 if __name__ == "__main__":
     asyncio.run(main())
