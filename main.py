@@ -1,5 +1,5 @@
 import asyncio
-from pyrogram import Client, filters
+from pyrogram import Client, filters, idle  # ✅ import idle here
 from config import *
 from db import Database
 
@@ -77,7 +77,7 @@ async def main():
     print("✅ Database connected.")
     await bot.start()
     print("🤖 Bot running...")
-    await idle()
+    await idle()  # ✅ now this will work
 
 if __name__ == "__main__":
     asyncio.run(main())
