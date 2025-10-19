@@ -1,6 +1,6 @@
 import os
 import asyncio
-from pyrogram import Client, filters
+from pyrogram import Client, filters, idle
 from db import Database
 
 # ----------------------
@@ -11,10 +11,6 @@ API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = int(os.environ.get("OWNER_ID"))
 DATABASE_URL = os.environ.get("DATABASE_URL")
-
-WEBHOOK_PATH = "/" + BOT_TOKEN  # unique path for Telegram
-PORT = int(os.environ.get("PORT", 10000))  # Render port
-HOST = "0.0.0.0"
 
 db = Database(DATABASE_URL)
 
@@ -111,16 +107,6 @@ async def start_quiz(_, msg):
     await msg.reply(f"✅ Quiz started from folder: {folder}")
 
 # ----------------------
-# Health Check HTTP Server
-# ----------------------
-async def healthcheck(reader, writer):
-    response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n✅ Quiz Bot is running!"
-    writer.write(response.encode("utf-8"))
-    await writer.drain()
-    writer.close()
-    await writer.wait_closed()
-
-# ----------------------
 # Main
 # ----------------------
 async def main():
@@ -130,19 +116,9 @@ async def main():
     await bot.start()
     print("🤖 Bot started")
 
-    # Set webhook with Render URL
-    RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")  # e.g., quickpyqquiz.onrender.com
-    WEBHOOK_URL = f"https://{RENDER_URL}{WEBHOOK_PATH}"
-    await bot.set_webhook(WEBHOOK_URL)
-    print(f"🌐 Webhook set to: {WEBHOOK_URL}")
-
-    # Start async web server for health check
-    server = await asyncio.start_server(healthcheck, HOST, PORT)
-    print(f"🌐 Web server listening on port {PORT}")
-
-    async with server:
-        await server.serve_forever()
+    # keep bot running
+    await idle()
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
+                
