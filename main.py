@@ -1,22 +1,15 @@
 import os
 import asyncio
 from pyrogram import Client, filters, idle
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
 from config import *
 from db import Database
 
-# ----------------------
-# Setup
-# ----------------------
 db = Database(DATABASE_URL)
 bot = Client("quizbot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # ----------------------
 # Handlers
 # ----------------------
-
-# /start handler for all users
 @bot.on_message(filters.private & filters.command("start"))
 async def start(_, msg):
     await msg.reply(
@@ -27,7 +20,6 @@ async def start(_, msg):
         "/startquiz FolderName - Start a quiz"
     )
 
-# /add (Owner only)
 @bot.on_message(filters.private & filters.user(OWNER_ID) & filters.command("add"))
 async def add_question(_, msg):
     await msg.reply("Send me the folder name (e.g., Gujarati Grammar):")
@@ -56,7 +48,6 @@ async def add_question(_, msg):
     await db.add_question(folder, question, options, correct, explanation)
     await msg.reply(f"✅ Question added under folder: {folder}")
 
-# /groupsave (Owner only)
 @bot.on_message(filters.private & filters.user(OWNER_ID) & filters.command("groupsave"))
 async def save_group(_, msg):
     await msg.reply("Send me the group ID or forward a message from the group.")
@@ -71,7 +62,6 @@ async def save_group(_, msg):
     await db.add_group(group_id, title)
     await msg.reply(f"✅ Group '{title}' saved.")
 
-# /startquiz FolderName
 @bot.on_message(filters.private & filters.command("startquiz"))
 async def start_quiz(_, msg):
     args = msg.text.split(maxsplit=1)
@@ -86,7 +76,7 @@ async def start_quiz(_, msg):
         return
 
     options = q["options"]
-    poll = await bot.send_poll(
+    await bot.send_poll(
         chat_id=msg.chat.id,
         question=q["question"],
         options=options,
@@ -98,20 +88,21 @@ async def start_quiz(_, msg):
     await msg.reply(f"✅ Quiz started from folder: {folder}")
 
 # ----------------------
-# Tiny HTTP server for Render free plan
+# Async web server for Render
 # ----------------------
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write("✅ Quiz Bot is running!".encode("utf-8"))
+async def handle_client(reader, writer):
+    response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n✅ Quiz Bot is running!"
+    writer.write(response.encode("utf-8"))
+    await writer.drain()
+    writer.close()
+    await writer.wait_closed()
 
-def run_webserver():
+async def start_webserver():
     port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), Handler)
+    server = await asyncio.start_server(handle_client, "0.0.0.0", port)
     print(f"🌐 Web server running on port {port}")
-    server.serve_forever()
+    async with server:
+        await server.serve_forever()
 
 # ----------------------
 # Main
@@ -122,10 +113,9 @@ async def main():
     await bot.start()
     print("🤖 Bot running...")
 
-    # Start HTTP server in background thread
-    threading.Thread(target=run_webserver, daemon=True).start()
-
-    await idle()  # keep bot running
+    # Run web server and keep bot idle in same loop
+    await asyncio.gather(start_webserver(), idle())
 
 if __name__ == "__main__":
     asyncio.run(main())
+    
