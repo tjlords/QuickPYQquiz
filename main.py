@@ -1,8 +1,6 @@
 import os
 import asyncio
 from pyrogram import Client, filters
-from pyrogram.types import Update
-from pyrogram.methods import SetWebhook
 from db import Database
 
 # ----------------------
@@ -27,8 +25,7 @@ bot = Client(
     "quizbot",
     api_id=API_ID,
     api_hash=API_HASH,
-    bot_token=BOT_TOKEN,
-    workdir="./"  # optional
+    bot_token=BOT_TOKEN
 )
 
 # ----------------------
@@ -133,12 +130,13 @@ async def main():
     await bot.start()
     print("🤖 Bot started")
 
-    # Set webhook with public URL
-    WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_URL')}{WEBHOOK_PATH}"
+    # Set webhook with Render URL
+    RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")  # e.g., quickpyqquiz.onrender.com
+    WEBHOOK_URL = f"https://{RENDER_URL}{WEBHOOK_PATH}"
     await bot.set_webhook(WEBHOOK_URL)
     print(f"🌐 Webhook set to: {WEBHOOK_URL}")
 
-    # Start simple async web server for Render port
+    # Start async web server for health check
     server = await asyncio.start_server(healthcheck, HOST, PORT)
     print(f"🌐 Web server listening on port {PORT}")
 
