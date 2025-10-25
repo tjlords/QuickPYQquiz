@@ -1,7 +1,7 @@
 import pdfplumber
 import PyPDF2
 import re
-from typing import List, Dict, Tuple
+from typing import List, Dict
 
 class PDFParser:
     def __init__(self):
