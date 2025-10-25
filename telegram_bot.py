@@ -1,115 +1,109 @@
 import os
 import tempfile
-import asyncio
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import telebot
 from pdf_parser import PDFParser
 from qa_processor import QAProcessor
 from config import TELEGRAM_BOT_TOKEN, MAX_QUESTIONS_PER_REQUEST
 
 class QABot:
     def __init__(self):
+        self.bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
         self.parser = PDFParser()
         self.processor = QAProcessor()
-        self.application = None
+        self.setup_handlers()
     
-    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        welcome_text = """
+    def setup_handlers(self):
+        @self.bot.message_handler(commands=['start', 'help'])
+        def send_welcome(message):
+            welcome_text = """
 🤖 Welcome to the Q&A Explanation Bot!
 
 Send me a PDF or text file with multiple-choice questions.
 
-Use /help for more information.
-        """
-        await update.message.reply_text(welcome_text)
-    
-    async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        help_text = """
-📚 How to use:
+Format should be:
+1. Question text?
+a) Option A
+b) Option B  
+c) Option C
+d) Option D
+Ex: Explanation
 
-1. Send a PDF/TXT file with questions like:
-   1. Question text?
-   a) Option A
-   b) Option B  
-   c) Option C
-   d) Option D
-   Ex: Explanation
+I'll extract questions and generate AI explanations!
+            """
+            self.bot.reply_to(message, welcome_text)
 
-2. I'll extract questions and generate explanations
+        @self.bot.message_handler(commands=['about'])
+        def send_about(message):
+            about_text = "🎓 Q&A Bot - Extracts questions from files and provides explanations"
+            self.bot.reply_to(message, about_text)
 
-Commands:
-/start - Welcome
-/help - This help
-/about - About bot
-        """
-        await update.message.reply_text(help_text)
-    
-    async def about(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        about_text = """
-🎓 Q&A Explanation Bot
-
-Extracts questions from files and provides explanations.
-        """
-        await update.message.reply_text(about_text)
-    
-    async def handle_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        try:
-            processing_msg = await update.message.reply_text("📥 Processing file...")
-            
-            document = update.message.document
-            file = await context.bot.get_file(document.file_id)
-            
-            file_extension = os.path.splitext(document.file_name)[1].lower()
-            
-            if file_extension not in ['.pdf', '.txt']:
-                await processing_msg.edit_text("❌ Please send PDF or TXT file.")
-                return
-            
-            with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
-                file_path = tmp_file.name
-            
-            await file.download_to_drive(file_path)
-            
-            await processing_msg.edit_text("🔍 Extracting questions...")
-            questions = self.parser.parse_file(file_path)
-            
-            if not questions:
-                await processing_msg.edit_text("❌ No questions found. Check format.")
+        @self.bot.message_handler(content_types=['document'])
+        def handle_document(message):
+            try:
+                # Check file type
+                file_info = self.bot.get_file(message.document.file_id)
+                file_extension = os.path.splitext(message.document.file_name)[1].lower()
+                
+                if file_extension not in ['.pdf', '.txt']:
+                    self.bot.reply_to(message, "❌ Please send a PDF or TXT file.")
+                    return
+                
+                # Download file
+                downloaded_file = self.bot.download_file(file_info.file_path)
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
+                    tmp_file.write(downloaded_file)
+                    file_path = tmp_file.name
+                
+                # Process file
+                processing_msg = self.bot.reply_to(message, "📥 Processing file...")
+                
+                questions = self.parser.parse_file(file_path)
+                
+                if not questions:
+                    self.bot.edit_message_text(
+                        "❌ No questions found. Please check the file format.",
+                        chat_id=message.chat.id,
+                        message_id=processing_msg.message_id
+                    )
+                    os.unlink(file_path)
+                    return
+                
+                self.bot.edit_message_text(
+                    f"📚 Found {len(questions)} questions. Generating explanations...",
+                    chat_id=message.chat.id,
+                    message_id=processing_msg.message_id
+                )
+                
+                processed_questions = self.processor.process_questions(
+                    questions, 
+                    max_questions=min(MAX_QUESTIONS_PER_REQUEST, len(questions))
+                )
+                
+                self.send_results(message, processed_questions)
+                
                 os.unlink(file_path)
-                return
-            
-            await processing_msg.edit_text(f"📚 Found {len(questions)} questions. Generating explanations...")
-            
-            processed_questions = self.processor.process_questions(
-                questions, 
-                max_questions=min(MAX_QUESTIONS_PER_REQUEST, len(questions))
-            )
-            
-            await self.send_results(update, context, processed_questions)
-            
-            os.unlink(file_path)
-            await processing_msg.delete()
-            
-        except Exception as e:
-            error_msg = f"❌ Error: {str(e)}"
-            await update.message.reply_text(error_msg)
-            print(f"Error: {e}")
+                self.bot.delete_message(message.chat.id, processing_msg.message_id)
+                
+            except Exception as e:
+                error_msg = f"❌ Error: {str(e)}"
+                self.bot.reply_to(message, error_msg)
+                print(f"Error: {e}")
     
-    async def send_results(self, update: Update, context: ContextTypes.DEFAULT_TYPE, questions):
+    def send_results(self, message, questions):
         for i, question in enumerate(questions, 1):
             response = self.format_question_response(question, i)
             
+            # Split long messages
             if len(response) > 4000:
                 parts = self.split_message(response)
                 for part in parts:
-                    await update.message.reply_text(part)
+                    self.bot.send_message(message.chat.id, part)
             else:
-                await update.message.reply_text(response)
-            
-            await asyncio.sleep(1)
+                self.bot.send_message(message.chat.id, response)
         
         summary = f"✅ Processed {len(questions)} questions!"
-        await update.message.reply_text(summary)
+        self.bot.send_message(message.chat.id, summary)
     
     def format_question_response(self, question, index):
         response = f"""
@@ -146,15 +140,59 @@ Explanation:
         return parts
     
     def run(self):
-        if not TELEGRAM_BOT_TOKEN:
-            raise ValueError("TELEGRAM_BOT_TOKEN not found")
-        
-        self.application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-        
-        self.application.add_handler(CommandHandler("start", self.start))
-        self.application.add_handler(CommandHandler("help", self.help))
-        self.application.add_handler(CommandHandler("about", self.about))
-        self.application.add_handler(MessageHandler(filters.Document.ALL, self.handle_document))
-        
-        print("Bot starting...")
-        self.application.run_polling()
+        print("Bot is running...")
+        self.bot.infinity_polling()
+
+# Webhook version for production (optional)
+class QABotWebhook:
+    def __init__(self):
+        self.bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+        self.parser = PDFParser()
+        self.processor = QAProcessor()
+        self.setup_handlers()
+    
+    def setup_handlers(self):
+        # Same handlers as above
+        @self.bot.message_handler(commands=['start', 'help'])
+        def send_welcome(message):
+            welcome_text = "🤖 Q&A Bot - Send me PDF/TXT files with questions!"
+            self.bot.reply_to(message, welcome_text)
+
+        @self.bot.message_handler(content_types=['document'])
+        def handle_document(message):
+            try:
+                file_info = self.bot.get_file(message.document.file_id)
+                file_extension = os.path.splitext(message.document.file_name)[1].lower()
+                
+                if file_extension not in ['.pdf', '.txt']:
+                    self.bot.reply_to(message, "❌ Please send PDF or TXT file.")
+                    return
+                
+                downloaded_file = self.bot.download_file(file_info.file_path)
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
+                    tmp_file.write(downloaded_file)
+                    file_path = tmp_file.name
+                
+                self.bot.reply_to(message, "📥 Processing file...")
+                
+                questions = self.parser.parse_file(file_path)
+                
+                if not questions:
+                    self.bot.reply_to(message, "❌ No questions found.")
+                    os.unlink(file_path)
+                    return
+                
+                processed_questions = self.processor.process_questions(
+                    questions, 
+                    max_questions=min(MAX_QUESTIONS_PER_REQUEST, len(questions))
+                )
+                
+                for i, question in enumerate(processed_questions, 1):
+                    response = f"Q{i}: {question['question']}\nAns: {question['correct_answer']}"
+                    self.bot.send_message(message.chat.id, response)
+                
+                os.unlink(file_path)
+                
+            except Exception as e:
+                self.bot.reply_to(message, f"❌ Error: {str(e)}")

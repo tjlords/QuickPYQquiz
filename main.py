@@ -8,7 +8,7 @@ def main():
     
     try:
         bot = QABot()
-        print("Starting Telegram Bot...")
+        print("Starting Telegram Bot with pyTelegramBotAPI...")
         bot.run()
     except Exception as e:
         print(f"Failed to start: {e}")
