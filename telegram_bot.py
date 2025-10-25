@@ -1,5 +1,7 @@
 import os
 import tempfile
+import asyncio
+from typing import Dict, List
 from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from pdf_parser import PDFParser
@@ -81,8 +83,15 @@ class QABot:
             document = update.message.document
             file = await context.bot.get_file(document.file_id)
             
+            # Get file extension
+            file_extension = os.path.splitext(document.file_name)[1].lower()
+            
+            if file_extension not in ['.pdf', '.txt']:
+                await processing_msg.edit_text("❌ Unsupported file type. Please send a PDF or TXT file.")
+                return
+            
             # Create temporary file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(document.file_name)[1]) as tmp_file:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
                 file_path = tmp_file.name
             
             # Download file
@@ -117,7 +126,7 @@ class QABot:
             await update.message.reply_text(error_msg)
             print(f"Error: {e}")
     
-    async def send_results(self, update: Update, context: ContextTypes.DEFAULT_TYPE, questions: list):
+    async def send_results(self, update: Update, context: ContextTypes.DEFAULT_TYPE, questions: List[Dict]):
         """Send processed questions to user"""
         for i, question in enumerate(questions, 1):
             response = self.format_question_response(question, i)
@@ -131,7 +140,6 @@ class QABot:
                 await update.message.reply_text(response, parse_mode='HTML')
             
             # Small delay to avoid rate limiting
-            import asyncio
             await asyncio.sleep(1)
         
         summary = f"""
@@ -167,7 +175,7 @@ class QABot:
         
         return response
     
-    def split_message(self, text: str, max_length: int = 4000) -> list:
+    def split_message(self, text: str, max_length: int = 4000) -> List[str]:
         """Split long message into parts"""
         parts = []
         while len(text) > max_length:
