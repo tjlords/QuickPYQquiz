@@ -14,5 +14,5 @@ OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 HUGGINGFACE_API_KEY = os.getenv('HUGGINGFACE_API_KEY')
 
 # Bot Settings
-MAX_QUESTIONS_PER_REQUEST = 10
+MAX_QUESTIONS_PER_REQUEST = 5  # Reduced for better performance
 SUPPORTED_FILE_TYPES = ['.pdf', '.txt']

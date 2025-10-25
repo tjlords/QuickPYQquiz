@@ -1,6 +1,7 @@
 import pdfplumber
 import PyPDF2
 import re
+import fitz  # PyMuPDF
 from typing import List, Dict
 
 class PDFParser:
@@ -11,63 +12,93 @@ class PDFParser:
         ]
     
     def extract_text_from_pdf(self, pdf_path: str) -> str:
-        """Extract text from PDF file"""
+        """Extract text from PDF file using multiple methods"""
         text = ""
+        
+        # Try PyMuPDF first (most reliable)
+        try:
+            doc = fitz.open(pdf_path)
+            for page in doc:
+                text += page.get_text() + "\n"
+            doc.close()
+            if text.strip():
+                return text
+        except Exception as e:
+            print(f"PyMuPDF error: {e}")
+        
+        # Try pdfplumber
         try:
             with pdfplumber.open(pdf_path) as pdf:
                 for page in pdf.pages:
                     text += page.extract_text() + "\n"
+            if text.strip():
+                return text
         except Exception as e:
-            print(f"Error with pdfplumber: {e}")
-            # Fallback to PyPDF2
-            try:
-                with open(pdf_path, 'rb') as file:
-                    reader = PyPDF2.PdfReader(file)
-                    for page in reader.pages:
-                        text += page.extract_text() + "\n"
-            except Exception as e2:
-                print(f"Error with PyPDF2: {e2}")
-                raise
+            print(f"pdfplumber error: {e}")
+        
+        # Try PyPDF2 as last resort
+        try:
+            with open(pdf_path, 'rb') as file:
+                reader = PyPDF2.PdfReader(file)
+                for page in reader.pages:
+                    text += page.extract_text() + "\n"
+        except Exception as e:
+            print(f"PyPDF2 error: {e}")
+            raise Exception("Could not extract text from PDF using any method")
+        
         return text
     
     def extract_qa_from_text(self, text: str) -> List[Dict]:
         """Extract Q&A pairs from text"""
         questions = []
         
-        # Pattern for questions with options and explanations
-        pattern = r'(\d+)\.\s*(.*?)\s*a\)\s*(.*?)\s*b\)\s*(.*?)\s*c\)\s*(.*?)\s*d\)\s*(.*?)\s*Ex:\s*(.*?)(?=\n\d+\.|\Z)'
-        matches = re.findall(pattern, text, re.DOTALL | re.IGNORECASE)
+        # Multiple patterns to catch different formats
+        patterns = [
+            r'(\d+)\.\s*(.*?)\s*a\)\s*(.*?)\s*b\)\s*(.*?)\s*c\)\s*(.*?)\s*d\)\s*(.*?)\s*Ex:\s*(.*?)(?=\n\d+\.|\Z)',
+            r'(\d+)\.\s*(.*?)\s*a\)\s*(.*?)\s*b\)\s*(.*?)\s*c\)\s*(.*?)\s*d\)\s*(.*?)\s*Ex:\s*(.*)',
+            r'(\d+)\.\s*(.*?)\s*\(A\)\s*(.*?)\s*\(B\)\s*(.*?)\s*\(C\)\s*(.*?)\s*\(D\)\s*(.*?)\s*Ex:\s*(.*?)(?=\n\d+\.|\Z)'
+        ]
         
-        for match in matches:
-            try:
-                q_num, question, opt_a, opt_b, opt_c, opt_d, explanation = match
-                
-                # Clean the text
-                question = self.clean_text(question)
-                opt_a = self.clean_text(opt_a)
-                opt_b = self.clean_text(opt_b)
-                opt_c = self.clean_text(opt_c)
-                opt_d = self.clean_text(opt_d)
-                explanation = self.clean_text(explanation)
-                
-                # Find correct answer (look for ✅ or similar indicators)
-                correct_answer = self.find_correct_answer(opt_a, opt_b, opt_c, opt_d, explanation)
-                
-                questions.append({
-                    'number': int(q_num.strip('.')),
-                    'question': question,
-                    'options': {
-                        'A': opt_a,
-                        'B': opt_b,
-                        'C': opt_c,
-                        'D': opt_d
-                    },
-                    'correct_answer': correct_answer,
-                    'original_explanation': explanation
-                })
-            except Exception as e:
-                print(f"Error processing question {match[0] if match else 'unknown'}: {e}")
-                continue
+        for pattern in patterns:
+            matches = re.findall(pattern, text, re.DOTALL | re.IGNORECASE)
+            if matches:
+                for match in matches:
+                    try:
+                        if len(match) == 8:
+                            q_num, question, opt_a, opt_b, opt_c, opt_d, explanation = match
+                        elif len(match) == 7:
+                            q_num, question, opt_a, opt_b, opt_c, opt_d = match
+                            explanation = ""
+                        else:
+                            continue
+                        
+                        # Clean the text
+                        question = self.clean_text(question)
+                        opt_a = self.clean_text(opt_a)
+                        opt_b = self.clean_text(opt_b)
+                        opt_c = self.clean_text(opt_c)
+                        opt_d = self.clean_text(opt_d)
+                        explanation = self.clean_text(explanation)
+                        
+                        # Find correct answer
+                        correct_answer = self.find_correct_answer(opt_a, opt_b, opt_c, opt_d, explanation)
+                        
+                        questions.append({
+                            'number': int(q_num.strip('.')),
+                            'question': question,
+                            'options': {
+                                'A': opt_a,
+                                'B': opt_b,
+                                'C': opt_c,
+                                'D': opt_d
+                            },
+                            'correct_answer': correct_answer,
+                            'original_explanation': explanation
+                        })
+                    except Exception as e:
+                        print(f"Error processing question: {e}")
+                        continue
+                break  # Use first pattern that matches
         
         return questions
     

@@ -2,7 +2,7 @@ import os
 import tempfile
 import asyncio
 from typing import Dict, List
-from telegram import Update, InputFile
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from pdf_parser import PDFParser
 from qa_processor import QAProcessor
@@ -17,59 +17,58 @@ class QABot:
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Send welcome message"""
         welcome_text = """
-        🤖 Welcome to the Q&A Explanation Bot!
-        
-        Send me a PDF or text file containing multiple-choice questions, and I'll:
-        • Extract all questions and answers
-        • Generate AI-powered explanations
-        • Provide detailed insights
-        
-        Supported formats: PDF, TXT
-        
-        Use /help for more information.
+🤖 Welcome to the Q&A Explanation Bot!
+
+Send me a PDF or text file containing multiple-choice questions, and I'll:
+• Extract all questions and answers
+• Generate AI-powered explanations
+• Provide detailed insights
+
+Supported formats: PDF, TXT
+
+Use /help for more information.
         """
         await update.message.reply_text(welcome_text)
     
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show help message"""
         help_text = """
-        📚 How to use this bot:
-        
-        1. Send a PDF or text file containing multiple-choice questions
-        2. The file should have questions in this format:
-           ```
-           1. Question text?
-           a) Option A
-           b) Option B  
-           c) Option C
-           d) Option D
-           Ex: Explanation
-           ```
-        3. I'll extract questions and generate AI explanations
-        
-        Commands:
-        /start - Welcome message
-        /help - This help message
-        /about - About this bot
-        
-        Note: Large files may take some time to process.
+📚 How to use this bot:
+
+1. Send a PDF or text file containing multiple-choice questions
+2. The file should have questions in this format:
+   1. Question text?
+   a) Option A
+   b) Option B  
+   c) Option C
+   d) Option D
+   Ex: Explanation
+
+3. I'll extract questions and generate AI explanations
+
+Commands:
+/start - Welcome message
+/help - This help message
+/about - About this bot
+
+Note: Large files may take some time to process.
         """
         await update.message.reply_text(help_text)
     
     async def about(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show about information"""
         about_text = """
-        🎓 Q&A Explanation Bot
-        
-        This bot uses AI to generate detailed explanations for multiple-choice questions.
-        
-        Features:
-        • PDF and text file parsing
-        • AI-powered explanations (Gemini/OpenRouter/HuggingFace)
-        • Clear, educational responses
-        • Support for various question formats
-        
-        Built with Python and love for education! 💫
+🎓 Q&A Explanation Bot
+
+This bot uses AI to generate detailed explanations for multiple-choice questions.
+
+Features:
+• PDF and text file parsing
+• AI-powered explanations (Gemini/OpenRouter/HuggingFace)
+• Clear, educational responses
+• Support for various question formats
+
+Built with Python and love for education! 💫
         """
         await update.message.reply_text(about_text)
     
@@ -143,31 +142,31 @@ class QABot:
             await asyncio.sleep(1)
         
         summary = f"""
-        ✅ Processing complete!
-        
-        Total questions processed: {len(questions)}
-        
-        Need more explanations? Send another file!
+✅ Processing complete!
+
+Total questions processed: {len(questions)}
+
+Need more explanations? Send another file!
         """
         await update.message.reply_text(summary)
     
     def format_question_response(self, question: Dict, index: int) -> str:
         """Format question response with HTML"""
         response = f"""
-        <b>Question {index}</b>
-        
-        <b>Q:</b> {question['question']}
-        
-        <b>Options:</b>
-        A) {question['options']['A']}
-        B) {question['options']['B']}
-        C) {question['options']['C']}
-        D) {question['options']['D']}
-        
-        <b>Correct Answer:</b> {question['correct_answer']}
-        
-        <b>🤖 AI Explanation:</b>
-        {question.get('ai_explanation', 'No explanation generated.')}
+<b>Question {index}</b>
+
+<b>Q:</b> {question['question']}
+
+<b>Options:</b>
+A) {question['options']['A']}
+B) {question['options']['B']}
+C) {question['options']['C']}
+D) {question['options']['D']}
+
+<b>Correct Answer:</b> {question['correct_answer']}
+
+<b>🤖 AI Explanation:</b>
+{question.get('ai_explanation', 'No explanation generated.')}
         """
         
         if question.get('original_explanation'):
